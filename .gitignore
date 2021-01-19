@@ -1,7 +1,15 @@
+# Local data/ project files
+data/analysis_sessions
+
+edfbrowser
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# IDE
+.idea
 
 # C extensions
 *.so
