@@ -56,23 +56,17 @@ automatically when switching between recordings.
 Once a sequence of EEG's have been analysed with the score reports, gaze data, and UI tracking; validate the recordings
 and generate the final data set by using the tools in the ```reprojecting``` directory.
 
-To validate the data:
-To playback a single recording and validate the data, try:
-
-WARNING: At the moment we have to edit the path in log file as it needs the double backslash, need to find a way to parse
-or write double backslsh in edfbrowser logger.
-
 This command will play the UI and eye tracking data for a particular session log.
 ```shell script
 python reprojecting\reproject.py --input <path_to_output_mirror_directory\path_to_timestamped_log_directory> --playback
 ```
 
 This will produce a ```.avi``` video file for a recording in the mirror directory which can be played back for verification.
+Creating video files like these are massive, like around a GB per minute. Need to change the codec or compress the video
+afterwards to avoid this.
 ```shell script
 python reprojecting\reproject.py --input <path_to_output_mirror_directory\path_to_timestamped_log_directory> --video
 ```
 
 
-<video width="320" height="240" controls>
-  <source src="visualise_comp.mp4" type="video/mp4">
-</video>
+![](visualise_comp.mp4)
