@@ -17,9 +17,17 @@ found in the [manual](https://www.tobiipro.com/siteassets/tobii-pro/user-manuals
 Then the eye tracker drivers need to be installed and the tracker calibrated. [Download](https://www.tobiipro.com/product-listing/eye-tracker-manager/) 
 the Tobii Eye Tracker Manager and follow the instructions to install the drivers and do an initial calibration.
 
-Next the OpenSCORE and EDFBrowser need to be installed to view the reports and analyse EEG's. OpenSCORE works with python 
+Next install this repo locally. Open a PowerShell terminal:
+```shell script
+git clone https://github.com/DWonGH/TEETACSI.git
+cd TEETACSI
+git submodule init
+git submodule update
+```
+
+The OpenSCORE and EDFBrowser need to be setup and installed to view the reports and analyse EEG's. OpenSCORE works with python 
 3.6 and the requirements described in the requirements.txt file. It is recommended to use a conda virtual environment. E.g. 
-Open a PowerShell terminal:
+in the PowerShell terminal:
 ```shell script
 conda create -y -n teetacsi python=3.6
 conda activate teetacsi
