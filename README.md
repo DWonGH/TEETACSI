@@ -34,6 +34,11 @@ conda activate teetacsi
 pip install -r .\OpenSCORE\requirements.txt
 ```
 
+There are also some separate requirements for processing the captured data
+```shell script
+pip install -r .\requirements.txt
+```
+
 To install EDFBrowser, download and extract the [latest release](https://github.com/d3-worgan/edfbrowser/releases) from 
 the git repository to the root directory of OpenSCORE. There should then be a directory in the root of OpenSCORE called 
 ```edfbrowser```, with the ```edfbrowser.exe``` and other ```.dll```s inside.
@@ -51,12 +56,13 @@ To load the EEG's specified in the ```specified_paths.txt``` file, go to ```File
 enter the interpreter name. A suggested output path will be automatically generated; targeting the TEETACSI data directory.
 Otherwise specify the required output directory. Finally give the location of the specified paths file that was created earlier. 
 
-Each ```.edf``` should now be loaded into OpenSCORE and can be navigated using the ```Previous```, ```Next``` buttons.
-Press ```Open in EDFBrowser``` to start analysing the EEG recording. The calibration and users head position can be managed
+After this, a 'mirror' directory structure reflecting the ```specified_paths.txt``` wil have been generated in the output location.
+Each ```.edf``` should will be loaded into OpenSCORE and the reports can be navigated using the ```Previous```, ```Next``` buttons.
+Press ```Open in EDFBrowser``` to start analysing the EEG recording. The eye tracker calibration and users head position can be managed
 or checked using the ```Calibrate``` button. Press the ```Record Gaze``` button to start recording eye data, and make sure
 to press the ```Stop Gaze``` button and close EDFBrowser before moving to the next EEG.
 
-Each time EDFBrowser is opened a new timestamped directory will be created in the mirror output directory containing the UI 
+While in this session, each time EDFBrowser is opened a new timestamped directory will be created in the mirror output directory containing the UI 
 tracking data. The eye tracking data will be saved to the same location. The score report will also be saved to the mirror 
 automatically when switching between recordings.
 

@@ -1,9 +1,7 @@
 import os
 import json
 import sys
-import time
 from copy import deepcopy
-import argparse
 import cv2
 
 from uistate import UIState
@@ -30,6 +28,7 @@ class PlayBack:
         self.current_ui_dict = None
         self.previous_ui_line = None
         self.previous_ui_dict = None
+        self.previous_montage = None
 
     def process(self, playback, video):
         assert playback or video, "Need to specify an option to visualise"
@@ -54,7 +53,6 @@ class PlayBack:
             fourcc = cv2.VideoWriter_fourcc(*'MJPG')
             writer = cv2.VideoWriter(os.path.join(os.path.dirname(self.ui_log_path), f"visualise.avi"), fourcc, 60, (self.image_width, self.image_height))
 
-
         # Want to throw away the UI tracking before the the eye tracker was started as it is not needed. To identify
         # the current UI log entry, we read up until the timestamp is newer than the eye tracking timestamp, and then
         # step back one entry.
@@ -74,15 +72,12 @@ class PlayBack:
                 self.current_ui_dict = json.loads(self.current_ui_line)
                 self.ui_state.update_state(self.current_ui_dict)
 
-        # setup the first image and dimensions
+        # Display the starting image
         image_name = f"{int(self.ui_state.log_id)+1}.png"  # +1 because screenshot lag
         image_path = os.path.join(self.image_directory, image_name)
         assert os.path.exists(image_path), "Couldnt find the image"
         self.image_clean = cv2.imread(image_path)
         assert self.image_clean is not None
-        self.image_height, self.image_width, _ = self.image_clean.shape
-        self.eye_state.image_width = self.image_width
-        self.eye_state.image_height = self.image_height
         self.draw()
         if self.image_drawn is not None:
             if playback:
@@ -98,7 +93,7 @@ class PlayBack:
 
                 # Read eye log
                 eye_log = self.eye_log.readline()
-                if eye_log is None:
+                if eye_log is "":
                     break
                 eye_log.strip()
                 eye_log = json.loads(eye_log)
@@ -139,6 +134,30 @@ class PlayBack:
             self.image_drawn = deepcopy(self.image_clean)
             self.image_drawn = self.ui_state.draw(self.image_drawn)
             self.eye_state.draw(self.image_drawn)
+
+    def analyse_fixation(self):
+        # calculate a bounding box or circle around the current centre gaze point
+        # top_left = centre_gaze_x - 10, centre_gaze_y + 10
+        # top_right = centre_gaze_x + 10, centre_gaze_y + 10
+        # bottom_left = centre_gaze_x - 10, centre_gaze_y - 10
+        # bottom_right = centre_gaze_x + 10, centre_gaze_y - 10
+
+        # Iterate the channels in the ui state
+        # If the signal baseline is within the range of the bounding box then it is currently fixated
+        # OR:
+        # Get the highest y point of the signal in screen coordinates
+        # Get the lowest y point of the signal in screen coordinates
+        # if any of the signals range intersects with the y range of the gaze box; then it is in view
+        # OR:
+        # Convert the data points to ys
+        # Build a list of ys for the bbox
+        # use python intersection to see if the ranges cross
+
+        # divide the graph width by the timescale to find out how many seconds per pixel
+        # count pixels from graph left to gaze box, then multiply by the seconds per pixel to find how many seconds across.
+        # Add the seconds to the current time
+        # gaze_time = current_time + ((fixation_point - graph_left) * (graph_width / timescale))
+        pass
 
     def setup(self, directory):
         assert(os.path.exists(directory)), f"The specified input directory is invalid {directory}"

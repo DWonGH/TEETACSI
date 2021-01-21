@@ -35,6 +35,9 @@ class UIState:
         self.montage_file_name = None
         self.montage_file_path = None
 
+        self.previous_montage_file_name = None
+        self.previous_montage_file_path = None
+
         self.line_color = (0, 255, 0)
         self.line_width = 3
         self.font_color = (0, 0, 255)
@@ -58,6 +61,8 @@ class UIState:
             self.time_scale = data['time_scale']
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            self.previous_montage_file_name = self.montage_file_name
+            self.previous_montage_file_path = self.montage_file_path
             self.graph_width = data['graph_dimensions'][0]
             self.graph_height = data['graph_dimensions'][1]
             graph_box = data['graph_box']
@@ -80,31 +85,50 @@ class UIState:
         elif event == 'FILE_CLOSED':
             return False
         elif event == 'MONTAGE_CHANGED':
+            self.previous_montage_file_name = self.montage_file_name
+            self.previous_montage_file_path = self.montage_file_path
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
             self.last_event = 'MONTAGE_CHANGED'
         elif event == 'CHANNELS_CHANGED':
+            self.previous_montage_file_name = self.montage_file_name
+            self.previous_montage_file_path = self.montage_file_path
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
             self.last_event = 'CHANNELS_CHANGED'
         elif event == 'FILTER_CHANGED':
+            self.previous_montage_file_name = self.montage_file_name
+            self.previous_montage_file_path = self.montage_file_path
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
             self.last_event = 'FILTER_CHANGED'
         elif event == 'AMPLITUDE_CHANGED':
+            self.previous_montage_file_name = self.montage_file_name
+            self.previous_montage_file_path = self.montage_file_path
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            self.last_event = 'AMPLITUDE CHANGED'
         elif event == 'TIMESCALE_CHANGED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
             self.time_scale = data['time_scale']
             self.last_event = 'TIMESCALE_CHANGED'
         elif event == 'TIME_POSITION_CHANGED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
             self.time_position = data['time']
             self.last_event = 'TIME_POSITION_CHANGED'
         elif event == 'VERTICAL_CHANGED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
             self.last_event = 'VERTICAL_CHANGED'
         elif event == 'ZOOM_CHANGED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
             self.time_scale = data['time_scale']
@@ -116,8 +140,11 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
             self.last_event = 'WINDOW_MOVED'
-        elif entry['event'] == 'WINDOW_RESIZED':
+        elif entry['event'] == 'GRAPH_RESIZED':
             self.graph_width = data['graph_dimensions'][0]
             self.graph_height = data['graph_dimensions'][1]
             graph_box = data['graph_box']
@@ -125,24 +152,55 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
-            self.last_event = 'WINDOW_RESIZED'
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
+            self.last_event = 'GRAPH_RESIZED'
         elif event == 'MODAL_OPENED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
             self.last_event = 'MODAL_OPENED'
         elif event == 'MODAL_CLOSED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
             self.last_event = 'MODAL_CLOSED'
         elif event == 'MENU_OPENED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
             self.last_event = 'MENU_OPENED'
-        elif event == 'MENU_CLOSED':
-            self.last_event = 'MENU_CLOSED'
-        elif event == 'WINDOW_MAXIMISED':
-            self.last_event = 'WINDOW_MAXIMISED'
-        elif event == 'WINDOW_MINIMISED':
-            self.last_event = 'WINDOW_MINIMISED'
-        elif event == 'WINDOW_FULLSCREEN':
-            self.last_event = 'WINDOW_FULLSCREEN'
         elif event == 'MENU_SEARCH':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
             self.last_event = 'MENU_SEARCH'
-
+        elif event == 'MENU_CLOSED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
+            self.last_event = 'MENU_CLOSED'
+        elif event == 'WINDOW_MINIMISED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
+            self.last_event = 'WINDOW_MINIMISED'
+        elif event == 'WINDOW_MAXIMISED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
+            self.last_event = 'WINDOW_MAXIMISED'
+        elif event == 'WINDOW_OPENED':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
+            self.last_event = 'WINDOW_OPENED'
+        elif event == 'WINDOW_FULLSCREEN':
+            self.montage_file_name = self.previous_montage_file_name
+            self.montage_file_path = self.previous_montage_file_path
+            self.load_channels_from_montage()
+            self.last_event = 'WINDOW_FULLSCREEN'
         else:
             print("Invalid event!")
 
@@ -216,7 +274,6 @@ class UIState:
         # image = self.draw_channel_signals(image)
         image = self.draw_log_info(image)
         return image
-        
 
     def draw_graph_bbox(self, image):
         image = cv2.line(image, self.graph_top_left, self.graph_top_right, self.line_color, self.line_width)
