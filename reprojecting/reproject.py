@@ -15,13 +15,7 @@ if __name__ == "__main__":
     input_dir = "D:\\teetacsi_local\\2020-01-19-TEETACSI_TEST\\TEETACSI\\data\\analysis_sessions\\20-01-2021_19-23\\v2.0.0\\edf\\eval\\abnormal\\01_tcp_ar\\007\\00000768\\s003_2012_04_06\\20-01-2021-19-32-34"
 
     print(f"Running TEETACSI data processing")
-    playback = PlayBack()
-
-    # playback.setup(args.input)
-    # playback.process(args.playback, args.video)
-
-    playback.setup(input_dir)
-    playback.process(True, False)
-
+    playback = PlayBack(input_dir, True, False)
+    playback.process()
     playback.finish()
     print(f"Done")
