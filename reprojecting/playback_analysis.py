@@ -16,6 +16,7 @@ class PlayBack:
         self.ui_log = None
         self.eye_log = None
         self.ui_state = UIState()
+        self.next_ui_state = UIState()
         self.eye_state = EyeState()
         self.image_directory = None
         self.image_clean = None
@@ -24,11 +25,8 @@ class PlayBack:
         self.eye_hz = None
         self.image_width = None
         self.image_height = None
-        self.current_ui_line = None
-        self.current_ui_dict = None
-        self.previous_ui_line = None
-        self.previous_ui_dict = None
-        self.previous_montage = None
+        self.ui_line = None
+        self.next_ui_line = None
 
     def process(self, playback, video):
         assert playback or video, "Need to specify an option to visualise"
@@ -36,12 +34,12 @@ class PlayBack:
         print(f"playback {playback}, video {video}")
 
         # Read the first line from ui log and initialise the state
-        self.current_ui_line = self.ui_log.readline()
-        self.current_ui_dict = json.loads(self.current_ui_line)
-        self.ui_state.update_state(self.current_ui_dict)
+        self.next_ui_line = self.ui_log.readline()
+        ui_entry = json.loads(self.next_ui_line)
+        self.next_ui_state.update_state(ui_entry)
 
         # setup the first image and dimensions
-        image_name = f"{int(self.ui_state.log_id)+1}.png"  # +1 because screenshot lag
+        image_name = f"{int(self.next_ui_state.log_id)+1}.png"  # +1 because screenshot lag
         image_path = os.path.join(self.image_directory, image_name)
         assert os.path.exists(image_path), "Couldnt find the image"
         self.image_clean = cv2.imread(image_path)
@@ -53,7 +51,7 @@ class PlayBack:
             fourcc = cv2.VideoWriter_fourcc(*'MJPG')
             writer = cv2.VideoWriter(os.path.join(os.path.dirname(self.ui_log_path), f"visualise.avi"), fourcc, 60, (self.image_width, self.image_height))
 
-        # Want to throw away the UI tracking before the the eye tracker was started as it is not needed. To identify
+        # Want to throw away the UI tracking before the the EYE tracking was started as it is not needed. To identify
         # the current UI log entry, we read up until the timestamp is newer than the eye tracking timestamp, and then
         # step back one entry.
         print("Skipping to start...")
@@ -61,33 +59,13 @@ class PlayBack:
         eye_line.strip()
         eye_log = json.loads(eye_line)
         self.eye_state.update_state(eye_log)
-        while True:
-            if self.eye_state.time_stamp < self.ui_state.current_timestamp:
-                self.ui_state.update_state(self.previous_ui_dict)
-                break
-            else:
-                self.previous_ui_line = self.current_ui_line
-                self.previous_ui_dict = self.current_ui_dict
-                self.current_ui_line = self.ui_log.readline()
-                self.current_ui_dict = json.loads(self.current_ui_line)
-                self.ui_state.update_state(self.current_ui_dict)
 
-        # Display the starting image
-        image_name = f"{int(self.ui_state.log_id)+1}.png"  # +1 because screenshot lag
-        image_path = os.path.join(self.image_directory, image_name)
-        assert os.path.exists(image_path), "Couldnt find the image"
-        self.image_clean = cv2.imread(image_path)
-        assert self.image_clean is not None
-        self.draw()
-        if self.image_drawn is not None:
-            if playback:
-                cv2.imshow("Analysis Playback", self.image_drawn)
-                cv2.waitKey(1)
+        while self.eye_state.time_stamp > self.next_ui_state.current_timestamp:
+            self.next_ui_log()
 
         # Now process the rest of the data.
         print("Begin visualisation.")
         eye_log_id = 1
-        self.ui_state.update_state(self.current_ui_dict)
         try:
             while True:
 
@@ -102,14 +80,10 @@ class PlayBack:
                 eye_log_id += 1
 
                 # Load UI changes as time progresses according to eye data
-                if self.eye_state.time_stamp > self.ui_state.current_timestamp:
-                    self.previous_ui_line = self.current_ui_line
-                    self.previous_ui_dict = self.current_ui_dict
-                    self.current_ui_line = self.ui_log.readline()
-                    self.current_ui_dict = json.loads(self.current_ui_line)
+                if self.eye_state.time_stamp > self.next_ui_state.current_timestamp:
+                    self.next_ui_log()
 
                 # Visualising
-                self.ui_state.update_state(self.previous_ui_dict)
                 image_name = f"{int(self.ui_state.log_id)+1}.png"  # +1 because screenshot lag
                 image_path = os.path.join(self.image_directory, image_name)
                 self.image_clean = cv2.imread(image_path)
@@ -120,7 +94,7 @@ class PlayBack:
                         cv2.waitKey(1)
                     if video:
                         writer.write(self.image_drawn)
-                self.ui_state.update_state(self.current_ui_dict)
+
                 sys.stdout.write(f"({eye_log_id}/{self.eye_state.num_logs})")
                 sys.stdout.flush()
                 sys.stdout.write('\r')
@@ -128,6 +102,14 @@ class PlayBack:
         finally:
             if video:
                 writer.release()
+
+    def next_ui_log(self):
+        self.ui_line = self.next_ui_line
+        self.next_ui_line = self.ui_log.readline()
+        entry = json.loads(self.ui_line)
+        next_entry = json.loads(self.next_ui_line)
+        self.ui_state.update_state(entry)
+        self.next_ui_state.update_state(next_entry)
 
     def draw(self):
         if self.image_clean is not None:
@@ -168,7 +150,10 @@ class PlayBack:
         assert(self.ui_log.closed is False)
 
         self.ui_state.montages_directory = os.path.join(directory, 'uilog', 'montages')
-        assert(os.path.exists(self.ui_state.montages_directory))
+        assert (os.path.exists(self.ui_state.montages_directory))
+
+        self.next_ui_state.montages_directory = os.path.join(directory, 'uilog', 'montages')
+        assert(os.path.exists(self.next_ui_state.montages_directory))
 
         self.image_directory = os.path.join(directory, 'uilog', 'screenshots')
         assert(os.path.exists(self.image_directory))
