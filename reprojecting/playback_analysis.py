@@ -55,10 +55,7 @@ class PlayBack:
         # the current UI log entry, we read up until the timestamp is newer than the eye tracking timestamp, and then
         # step back one entry.
         print("Skipping to start...")
-        eye_line = self.eye_log.readline()
-        eye_line.strip()
-        eye_log = json.loads(eye_line)
-        self.eye_state.update_state(eye_log)
+        self.next_eye_log()
 
         while self.eye_state.time_stamp > self.next_ui_state.current_timestamp:
             self.next_ui_log()
@@ -69,17 +66,10 @@ class PlayBack:
         try:
             while True:
 
-                # Read eye log
-                eye_log = self.eye_log.readline()
-                if eye_log is "":
-                    break
-                eye_log.strip()
-                eye_log = json.loads(eye_log)
-                self.eye_state.update_state(eye_log)
-                self.eye_state.log_id = eye_log_id
-                eye_log_id += 1
+                # Read the next eye log entry
+                self.next_eye_log()
 
-                # Load UI changes as time progresses according to eye data
+                # Read UI changes as time progresses according to the eye data
                 if self.eye_state.time_stamp > self.next_ui_state.current_timestamp:
                     self.next_ui_log()
 
@@ -99,6 +89,7 @@ class PlayBack:
                 sys.stdout.flush()
                 sys.stdout.write('\r')
                 sys.stdout.flush()
+                eye_log_id += 1
         finally:
             if video:
                 writer.release()
@@ -110,6 +101,14 @@ class PlayBack:
         next_entry = json.loads(self.next_ui_line)
         self.ui_state.update_state(entry)
         self.next_ui_state.update_state(next_entry)
+
+    def next_eye_log(self):
+        eye_log = self.eye_log.readline()
+        if eye_log is "":
+            return False
+        eye_log.strip()
+        eye_log = json.loads(eye_log)
+        self.eye_state.update_state(eye_log)
 
     def draw(self):
         if self.image_clean is not None:
