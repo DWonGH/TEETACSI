@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import traceback
 from datetime import datetime
 
 import cv2
@@ -228,8 +229,17 @@ class UIState:
             x = datetime.strptime(x, '%H:%M:%S')
             return x.second + x.minute * 60 + x.hour * 3600
         except ValueError:
-            x = datetime.strptime(x, '%H:%M:%S.%f')
-            return x.second + x.minute * 60 + x.hour * 3600
+            print("Trying next format")
+            try:
+                x = datetime.strptime(x, '%M:%S')
+                return x.second + x.minute * 60
+            except ValueError:
+                print("Trying next format")
+                try:
+                    x = datetime.strptime(x, '%H:%M:%S.%f')
+                    return x.second + x.minute * 60 + x.hour * 3600
+                except ValueError:
+                    traceback.print_exc()
 
     def time_position_to_samples(self, channel):
         x = self.time_position.split('(')[1].strip(')')

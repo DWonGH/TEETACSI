@@ -12,10 +12,11 @@ if __name__ == "__main__":
     parser.add_argument("--all", dest='all', action='store_true', help="Create a video for each recording in the mirror directory")
     args = parser.parse_args()
 
-    input_dir = "D:\\teetacsi_local\\2020-01-19-TEETACSI_TEST\\TEETACSI\\data\\analysis_sessions\\20-01-2021_19-23\\v2.0.0\\edf\\eval\\abnormal\\01_tcp_ar\\007\\00000768\\s003_2012_04_06\\20-01-2021-19-32-34"
-    args.input = input_dir
-    args.playback = True
-    args.video = False
+    # Debugging
+    # input_dir = "D:\\teetacsi_local\\2020-01-19-TEETACSI_TEST\\TEETACSI\\data\\analysis_sessions\\20-01-2021_19-23\\v2.0.0\\edf\\eval\\abnormal\\01_tcp_ar\\007\\00000768\\s003_2012_04_06\\20-01-2021-19-32-34"
+    # args.input = input_dir
+    # args.playback = True
+    # args.video = False
     print(f"Running TEETACSI data processing")
     playback = PlayBack(args.input, args.playback, args.video)
     playback.process()
