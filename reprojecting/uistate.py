@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import traceback
 from datetime import datetime
 
 import cv2
@@ -223,11 +224,12 @@ class UIState:
         Convert the recorded time string in the log
         :return:
         """
-        x = self.time_position.split('(')[1].strip(')')
         try:
+            x = self.time_position.split('(')[1].strip(')')
             x = datetime.strptime(x, '%H:%M:%S')
             return x.second + x.minute * 60 + x.hour * 3600
         except ValueError:
+            x = self.time_position.split('(')[1].strip(')')
             x = datetime.strptime(x, '%H:%M:%S.%f')
             return x.second + x.minute * 60 + x.hour * 3600
 
@@ -253,8 +255,15 @@ class UIState:
             split = self.time_scale.strip(" sec")
             return float(split)
         else:
-            pt = datetime.strptime(self.time_scale, '%H:%M:%S')
-            return pt.second + pt.minute * 60 + pt.hour * 3600
+            try:
+                pt = datetime.strptime(self.time_scale, '%H:%M:%S')
+                return pt.second + pt.minute * 60 + pt.hour * 3600
+            except ValueError:
+                try:
+                    pt = datetime.strptime(self.time_scale, '%M:%S')
+                    return pt.second + pt.minute * 60 + pt.hour * 3600
+                except ValueError:
+                    print("Try a different format")
 
     def draw(self, image):
         image = self.draw_graph_bbox(image)
