@@ -9,7 +9,7 @@ The TEETACSI project acquires eye tracking data using the Tobii Pro Nano,
 a modified version of [OpenSCORE](https://github.com/DWonGH/OpenSCORE), a modified version of 
 [EDFBrowser](https://github.com/d3-worgan/edfbrowser) and the TUEG EEG dataset for analysis.
 
-The project currently makes use of the TUEG data set which can be downloaded using the [TUEG Tools](https://github.com/DWonGH/tueg-tools).
+Download the TUEG data set for analysis using the [TUEG Tools](https://github.com/DWonGH/tueg-tools).
 
 Then install the Tobii Pro Nano or eye tracker physically on the laptop. Instructions for setting up the Tobii can be 
 found in the [manual](https://www.tobiipro.com/siteassets/tobii-pro/user-manuals/tobii-pro-nano-user-manual.pdf/?v=2.0).
@@ -17,7 +17,7 @@ found in the [manual](https://www.tobiipro.com/siteassets/tobii-pro/user-manuals
 Then the eye tracker drivers need to be installed and the tracker calibrated. [Download](https://www.tobiipro.com/product-listing/eye-tracker-manager/) 
 the Tobii Eye Tracker Manager and follow the instructions to install the drivers and do an initial calibration.
 
-Next install this repo locally. Open a PowerShell terminal:
+Next install this repo locally. E.g. Open a PowerShell terminal:
 ```shell script
 git clone https://github.com/DWonGH/TEETACSI.git
 cd TEETACSI
@@ -47,7 +47,7 @@ the git repository to the root directory of OpenSCORE. There should then be a di
 The required EEG's from the TUEG data set must be specified in a ```.txt``` file; like the example in ```specified_paths.txt```. 
 Replace the examples in the ```specified_paths.txt``` file with the required ```.edf``` locations for the session. 
 
-Run OpenSCORE in PowerShell using 
+Then run OpenSCORE in PowerShell. E.g. 
 ```shell script
 .\run_openscore.ps1
 ```
@@ -57,17 +57,17 @@ enter the interpreter name. A suggested output path will be automatically genera
 Otherwise specify the required output directory. Finally give the location of the specified paths file that was created earlier. 
 
 After this, a 'mirror' directory structure reflecting the ```specified_paths.txt``` wil have been generated in the output location.
-Each ```.edf``` should will be loaded into OpenSCORE and the reports can be navigated using the ```Previous```, ```Next``` buttons.
+Each ```.edf``` will be loaded into OpenSCORE and the reports can be navigated using the ```Previous```, ```Next``` buttons.
 Press ```Open in EDFBrowser``` to start analysing the EEG recording. The eye tracker calibration and users head position can be managed
 or checked using the ```Calibrate``` button. Press the ```Record Gaze``` button to start recording eye data, and make sure
 to press the ```Stop Gaze``` button and close EDFBrowser before moving to the next EEG.
 
-While in this session, each time EDFBrowser is opened a new timestamped directory will be created in the mirror output directory containing the UI 
+While in the session, each time EDFBrowser is opened a new timestamped directory will be created in the mirror output directory containing the UI 
 tracking data. The eye tracking data will be saved to the same location. The score report will also be saved to the mirror 
 automatically when switching between recordings.
 
 # Data Verification & Acquisition
-Once a sequence of EEG's have been analysed with the score reports, gaze data, and UI tracking; validate the recordings
+Once a sequence of EEG's have been analysed with the score reports, gaze data, and UI tracking saved; validate the recordings
 and generate the final data set by using the tools in the ```reprojecting``` directory.
 
 This command will play the UI and eye tracking data for a particular session log.
@@ -81,6 +81,3 @@ afterwards to avoid this.
 ```shell script
 python reprojecting\reproject.py --input <path_to_output_mirror_directory\path_to_timestamped_log_directory> --video
 ```
-
-
-![](visualise_comp.mp4)
