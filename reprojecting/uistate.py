@@ -15,7 +15,11 @@ from lxml import etree
 class UIState:
 
     def __init__(self, montages_directory=None):
-
+        """
+        Reconstructs the state and tracks the changes in a UI log file
+        :param montages_directory: Need to specify the location of the corresponding montages that were saved with the log.
+                                    These are used to reconstruct filters, baselines, active channels etc.
+        """
         self.log_id = None
         self.last_event = None
         self.current_timestamp = None
@@ -42,8 +46,12 @@ class UIState:
         self.font_thick = 2
         self.font_type = cv2.FONT_HERSHEY_PLAIN
 
-    def update_state(self, entry):
-
+    def update(self, entry):
+        """
+        Read an entry from the UI log file and reconstruct the state using the information
+        :param entry: A line from the UI log loaded into a dictionary
+        :return: False if the entry was "FILE_CLOSED"
+        """
         event = entry['event']
         if "data" in entry:
             data = entry['data']
@@ -149,14 +157,19 @@ class UIState:
             print("Invalid event!")
 
     def load_channels_from_montage(self):
+        """
+        Each time a filter or amplitude or other channel parameters are changed a montage file will be saved using the
+        log id as a filename e.g. 1.mtg. Use the corresponding montage to reconstruct the current state of the signals.
+        :return:
+        """
 
         # Update the current montage file path
         if self.montage_file_name is not None:
             if '.mtg' not in self.montage_file_name:
                 self.montage_file_name = f"{self.montage_file_name}.mtg"
             self.montage_file_path = os.path.join(self.montages_directory, self.montage_file_name)
-
             assert os.path.exists(self.montage_file_path)
+
             # Read in the channels from the mtg file
             doc = etree.parse(self.montage_file_path)
             signals = doc.xpath('signalcomposition')
@@ -188,11 +201,15 @@ class UIState:
                 self.channels[i].update_baseline(self.graph_height, len(self.channels), self.graph_top_left[1])
 
     def update_channel_data(self):
+        """
+        Reconstruct the signals for the current state.
+        This is not complete, and the signals appear to be skewed left or right~?
+        :return:
+        """
         total_seconds = self.time_position_to_seconds()
         y = int(self.time_scale.split(' ')[0])
         for i, channel in enumerate(self.channels):
             start = self.edf.getSampleFrequency(i) * total_seconds
-            # print(f"start {start}")
             num_samples_to_read = int(self.edf.getSampleFrequency(i) * y)
             self.edf.rewind(0)
             start = self.edf.fseek(i, start, 'EDFSEEK_SET')
@@ -202,15 +219,42 @@ class UIState:
         # TODO: Apply amplitude to data
 
     def time_position_to_seconds(self):
+        """
+        Convert the recorded time string in the log
+        :return:
+        """
         x = self.time_position.split('(')[1].strip(')')
-        x = time.strptime(x, '%H:%M:%S')
-        return x.tm_sec + x.tm_min * 60 + x.tm_hour * 3600
+        try:
+            x = datetime.strptime(x, '%H:%M:%S')
+            return x.second + x.minute * 60 + x.hour * 3600
+        except ValueError:
+            x = datetime.strptime(x, '%H:%M:%S.%f')
+            return x.second + x.minute * 60 + x.hour * 3600
 
     def time_position_to_samples(self, channel):
         x = self.time_position.split('(')[1].strip(')')
         x = time.strptime(x, '%H:%M:%S')
         total_seconds = x.tm_sec + x.tm_min * 60 + x.tm_hour * 3600
         return self.edf.getSampleFrequency(channel) * total_seconds
+
+    def timescale_to_seconds(self):
+        """
+        The timescale is recorded from EDFBrowser as a string e.g. 10 sec.
+        Change to seconds to perform calculations
+        :return: an int describing a number of seconds
+        """
+        if "uS" in self.time_scale:
+            split = self.time_scale.strip("uS")
+            return float(split) / 1000000
+        elif "mS" in self.time_scale:
+            split = self.time_scale.strip("mS")
+            return float(split) / 1000
+        elif "sec" in self.time_scale:
+            split = self.time_scale.strip(" sec")
+            return float(split)
+        else:
+            pt = datetime.strptime(self.time_scale, '%H:%M:%S')
+            return pt.second + pt.minute * 60 + pt.hour * 3600
 
     def draw(self, image):
         image = self.draw_graph_bbox(image)
@@ -219,8 +263,12 @@ class UIState:
         image = self.draw_log_info(image)
         return image
 
-
     def draw_graph_bbox(self, image):
+        """
+        Draws a box around the signals graph to validate tracking
+        :param image: The corresponding screenshot to this current log
+        :return: An image with a new box on it
+        """
         image = cv2.line(image, self.graph_top_left, self.graph_top_right, self.line_color, self.line_width)
         image = cv2.line(image, self.graph_bottom_left, self.graph_bottom_right, self.line_color, self.line_width)
         image = cv2.line(image, self.graph_top_left, self.graph_bottom_left, self.line_color, self.line_width)
@@ -228,6 +276,11 @@ class UIState:
         return image
 
     def draw_log_info(self, image):
+        """
+        Draws the UI state to validate UI tracking
+        :param image: The corresponding screenshot to this current log
+        :return: An image with new writing on
+        """
         pos = 100
         step = 25
         image = cv2.putText(image, f"id: {self.log_id}", (20, pos), self.font_type, self.font_scale, self.font_color, self.font_thick, cv2.LINE_AA)
@@ -252,6 +305,11 @@ class UIState:
         return image
     
     def draw_channel_baselines(self, image):
+        """
+        Draws the baseline for each channel
+        :param image: The corresponding screenshot to this current log
+        :return: An image with new horizontal lines describing the position of the signal baselines
+        """
         graph_left = self.graph_top_left[0]
         graph_right = self.graph_top_right[0]
         graph_top = self.graph_top_left[1]
@@ -261,6 +319,11 @@ class UIState:
         return image
 
     def draw_channel_signals(self, image):
+        """
+        Draws the reconstructed signals
+        :param image: The corresponding screenshot to this current log
+        :return: An image with the EEG data traced over the top
+        """
         app = QApplication(sys.argv)
         screen = app.screens()[0]
         dpi = screen.physicalDotsPerInch()
