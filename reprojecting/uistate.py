@@ -3,6 +3,7 @@ import sys
 import time
 import traceback
 from datetime import datetime
+import multiprocessing
 
 import cv2
 import numpy
@@ -91,32 +92,40 @@ class UIState:
         elif event == 'MONTAGE_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            if self.opened: self.update_channel_data()
             self.last_event = 'MONTAGE_CHANGED'
         elif event == 'CHANNELS_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            if self.opened: self.update_channel_data()
             self.last_event = 'CHANNELS_CHANGED'
         elif event == 'FILTER_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            if self.opened: self.update_channel_data()
             self.last_event = 'FILTER_CHANGED'
         elif event == 'AMPLITUDE_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            if self.opened: self.update_channel_data()
             self.last_event = 'AMPLITUDE CHANGED'
         elif event == 'TIMESCALE_CHANGED':
             self.time_scale = data['time_scale']
+            if self.opened: self.update_channel_data()
             self.last_event = 'TIMESCALE_CHANGED'
         elif event == 'TIME_POSITION_CHANGED':
             self.time_position = data['time']
+            if self.opened: self.update_channel_data()
             self.last_event = 'TIME_POSITION_CHANGED'
         elif event == 'VERTICAL_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            if self.opened: self.update_channel_data()
             self.last_event = 'VERTICAL_CHANGED'
         elif event == 'ZOOM_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
+            if self.opened: self.update_channel_data()
             self.time_scale = data['time_scale']
             self.time_position = data['time']
             self.last_event = 'ZOOM_CHANGED'
@@ -126,6 +135,7 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
+            if self.opened: self.update_channel_data()
             self.last_event = 'WINDOW_MOVED'
         elif entry['event'] == 'GRAPH_RESIZED':
             self.graph_width = data['graph_dimensions'][0]
@@ -135,6 +145,7 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
+            if self.opened: self.update_channel_data()
             self.last_event = 'GRAPH_RESIZED'
         elif event == 'MODAL_OPENED':
             self.last_event = 'MODAL_OPENED'
@@ -207,13 +218,13 @@ class UIState:
         This is not complete, and the signals appear to be skewed left or right~?
         :return:
         """
-        total_seconds = self.time_position_to_seconds()
-        y = int(self.time_scale.split(' ')[0])
+        time_position = self.time_position_to_seconds()
+        time_scale = self.timescale_to_seconds()
         for i, channel in enumerate(self.channels):
-            start = self.edf.getSampleFrequency(i) * total_seconds
-            num_samples_to_read = int(self.edf.getSampleFrequency(i) * y)
-            self.edf.rewind(0)
-            start = self.edf.fseek(i, start, 'EDFSEEK_SET')
+            start = int(self.edf.getSampleFrequency(i) * time_position)
+            num_samples_to_read = int(self.edf.getSampleFrequency(i) * time_scale)
+            self.edf.rewind(i)
+            start = self.edf.fseek(i, start, 0)
             channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
             assert num_samples_to_read == self.edf.readSamples(i, channel.data, num_samples_to_read)
         # TODO: Apply filters to data
@@ -268,7 +279,7 @@ class UIState:
     def draw(self, image):
         image = self.draw_graph_bbox(image)
         image = self.draw_channel_baselines(image)
-        # image = self.draw_channel_signals(image)
+        image = self.draw_channel_signals(image)
         image = self.draw_log_info(image)
         return image
 
@@ -329,25 +340,40 @@ class UIState:
 
     def draw_channel_signals(self, image):
         """
-        Draws the reconstructed signals
+        Given the offset o and scale s, we should be able to read the original EDF file and then convert the
+        raw data Yr to a vertical screen coordinate Yc using Yc = s * Yr + o
         :param image: The corresponding screenshot to this current log
         :return: An image with the EEG data traced over the top
         """
+
+        # Scale is recorded in EDFBrowser as Volts per CM. So we need to find out our scale from pixels per inch to
+        # pixels per cm
         app = QApplication(sys.argv)
         screen = app.screens()[0]
         dpi = screen.physicalDotsPerInch()
-        print(f"dpi {dpi}")
         app.quit()
+        dpi = 72
         ppc = dpi * 2.54
+
+        for channel in self.channels:
+            image = self.draw_signal(channel, ppc, image)
+
+        return image
+
+    def draw_signal(self, channel, ppc, image):
+        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 255), (0, 255, 255), (175, 175, 175)]
         graph_left = self.graph_top_left[0]
-        for channel in range(len(self.channels)):
-            channel = self.channels[channel]
-            if isinstance(channel.data, numpy.ndarray):
-                num_samples = channel.data.size
-                spacing = self.graph_width / num_samples
-                for point in range(channel.data.size-1):
-                    x_1 = int(int(point * spacing) + graph_left)
-                    y_1 = int(((float(channel.voltspercm)/dpi) * channel.data[point]) + channel.baseline)
-                    x_2 = int(int((point+1) * spacing) + graph_left)
-                    y_2 = int(((float(channel.voltspercm)/dpi) * channel.data[point+1]) + channel.baseline)
-                    image = cv2.line(image, (x_1, y_1), (x_2, y_2), (255, 0, 0), 1)
+        if isinstance(channel.data, numpy.ndarray):
+            num_samples = channel.data.size
+            spacing = self.graph_width / num_samples
+            for point in range(channel.data.size - 1):
+                # Draw a line between the current and next point in the data
+                # Yc = s * Yr + o
+                x_1 = int(int(point * spacing) + graph_left)
+                y_1 = int((((float(channel.voltspercm) / ppc) * channel.data[point]) * -1) + channel.baseline)
+                x_2 = int(int((point + 1) * spacing) + graph_left)
+                y_2 = int((((float(channel.voltspercm) / ppc) * channel.data[point + 1]) * -1) + channel.baseline)
+                image = cv2.line(image, (x_1, y_1), (x_2, y_2), colors[int(channel.id) % len(colors)], 1)
+        return image
+
+
