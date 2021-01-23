@@ -16,7 +16,12 @@ from lxml import etree
 
 class UIState:
 
-    def __init__(self, montages_directory=None):
+    def __del__(self):
+        if self.multi is True:
+            self.pool.close()
+            self.pool.join()
+
+    def __init__(self, montages_directory=None, multi=False):
         """
         Reconstructs the state and tracks the changes in a UI log file
         :param montages_directory: Need to specify the location of the corresponding montages that were saved with the log.
@@ -47,6 +52,12 @@ class UIState:
         self.font_scale = 2
         self.font_thick = 2
         self.font_type = cv2.FONT_HERSHEY_PLAIN
+
+        self.multi = multi
+        if self.multi:
+            self.num_cores = multiprocessing.cpu_count()
+            lock = multiprocessing.Lock()
+            self.pool = multiprocessing.Pool(initializer=self.init, processes=self.num_cores, initargs=(lock,))
 
     def update(self, entry):
         """
@@ -230,6 +241,25 @@ class UIState:
         # TODO: Apply filters to data
         # TODO: Apply amplitude to data
 
+    # def update_signals(self):
+    #     time_position = self.time_position_to_seconds()
+    #     time_scale = self.timescale_to_seconds()
+    #     tasks = []
+    #     for channel in self.channels:
+    #         tasks.append((time_position, time_scale, channel, self.edf))
+    #     results = self.pool.starmap(self.update_signal, tasks)
+    #
+    # @staticmethod
+    # def update_signal(time_position, time_scale, channel, edf):
+    #     start = int(edf.getSampleFrequency(channel.id) * time_position)
+    #     num_samples_to_read = int(edf.getSampleFrequency(channel.id) * time_scale)
+    #     lock.acquire()
+    #     edf.rewind(channel.id)
+    #     start = edf.fseek(channel.id, start, 0)
+    #     channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
+    #     assert num_samples_to_read == edf.readSamples(channel.id, channel.data, num_samples_to_read)
+    #     lock.release()
+
     def time_position_to_seconds(self):
         """
         Convert the recorded time string in the log
@@ -348,32 +378,38 @@ class UIState:
 
         # Scale is recorded in EDFBrowser as Volts per CM. So we need to find out our scale from pixels per inch to
         # pixels per cm
-        app = QApplication(sys.argv)
-        screen = app.screens()[0]
-        dpi = screen.physicalDotsPerInch()
-        app.quit()
         dpi = 72
         ppc = dpi * 2.54
 
+        tasks = []
         for channel in self.channels:
-            image = self.draw_signal(channel, ppc, image)
+            tasks.append((self.graph_width, self.graph_top_left[0], ppc, channel))
+
+        results = self.pool.starmap(self.draw_signal, tasks)
+
+        for i in range(len(results)):
+            for j in range(len(results[i])-2):
+                image = cv2.line(image, (results[i][j][0], results[i][j][1]), (results[i][j+1][0], results[i][j+1][1]), (255, 0, 0), 1)
 
         return image
 
-    def draw_signal(self, channel, ppc, image):
-        colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 255), (0, 255, 255), (175, 175, 175)]
-        graph_left = self.graph_top_left[0]
+    @staticmethod
+    def init(l):
+        global lock
+        lock = l
+
+    @staticmethod
+    def draw_signal(graph_width, graph_left, ppc, channel):
         if isinstance(channel.data, numpy.ndarray):
             num_samples = channel.data.size
-            spacing = self.graph_width / num_samples
+            arr = numpy.empty((num_samples, 2), dtype=numpy.int)
+            spacing = graph_width / num_samples
             for point in range(channel.data.size - 1):
-                # Draw a line between the current and next point in the data
                 # Yc = s * Yr + o
-                x_1 = int(int(point * spacing) + graph_left)
-                y_1 = int((((float(channel.voltspercm) / ppc) * channel.data[point]) * -1) + channel.baseline)
-                x_2 = int(int((point + 1) * spacing) + graph_left)
-                y_2 = int((((float(channel.voltspercm) / ppc) * channel.data[point + 1]) * -1) + channel.baseline)
-                image = cv2.line(image, (x_1, y_1), (x_2, y_2), colors[int(channel.id) % len(colors)], 1)
-        return image
+                x = int(int(point * spacing) + graph_left)
+                y = int((((float(channel.voltspercm) / ppc) * channel.data[point]) * -1) + channel.baseline)
+                arr[point][0] = x
+                arr[point][1] = y
+            return arr
 
 
