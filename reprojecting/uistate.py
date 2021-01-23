@@ -234,31 +234,14 @@ class UIState:
         for i, channel in enumerate(self.channels):
             start = int(self.edf.getSampleFrequency(i) * time_position)
             num_samples_to_read = int(self.edf.getSampleFrequency(i) * time_scale)
-            self.edf.rewind(i)
-            start = self.edf.fseek(i, start, 0)
-            channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
-            assert num_samples_to_read == self.edf.readSamples(i, channel.data, num_samples_to_read)
+            print(num_samples_to_read)
+            if num_samples_to_read > 0:
+                self.edf.rewind(i)
+                start = self.edf.fseek(i, start, 0)
+                channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
+                assert num_samples_to_read == self.edf.readSamples(i, channel.data, num_samples_to_read)
         # TODO: Apply filters to data
         # TODO: Apply amplitude to data
-
-    # def update_signals(self):
-    #     time_position = self.time_position_to_seconds()
-    #     time_scale = self.timescale_to_seconds()
-    #     tasks = []
-    #     for channel in self.channels:
-    #         tasks.append((time_position, time_scale, channel, self.edf))
-    #     results = self.pool.starmap(self.update_signal, tasks)
-    #
-    # @staticmethod
-    # def update_signal(time_position, time_scale, channel, edf):
-    #     start = int(edf.getSampleFrequency(channel.id) * time_position)
-    #     num_samples_to_read = int(edf.getSampleFrequency(channel.id) * time_scale)
-    #     lock.acquire()
-    #     edf.rewind(channel.id)
-    #     start = edf.fseek(channel.id, start, 0)
-    #     channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
-    #     assert num_samples_to_read == edf.readSamples(channel.id, channel.data, num_samples_to_read)
-    #     lock.release()
 
     def time_position_to_seconds(self):
         """
@@ -307,9 +290,10 @@ class UIState:
                     print("Try a different format")
 
     def draw(self, image):
-        image = self.draw_graph_bbox(image)
-        image = self.draw_channel_baselines(image)
-        image = self.draw_channel_signals(image)
+        if not (self.last_event == "MENU_OPENED" or self.last_event == "MENU_SEARCH" or self.last_event == "MENU_CLOSED" or self.last_event == "MODAL_OPENED" or self.last_event == "MODAL_CLOSED" or self.last_event == "WINDOW_MINIMISED"):
+            image = self.draw_graph_bbox(image)
+            image = self.draw_channel_baselines(image)
+            image = self.draw_channel_signals(image)
         image = self.draw_log_info(image)
         return image
 
