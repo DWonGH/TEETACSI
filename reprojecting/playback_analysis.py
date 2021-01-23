@@ -108,6 +108,7 @@ class PlayBack:
                 # Read UI changes as time progresses according to the eye data
                 if self.eye.time_stamp > self.ui_next.current_timestamp:
                     self.next_ui_log()
+                    self.next_screenshot()
 
                 self.analyse_fixation()
 
@@ -162,10 +163,7 @@ class PlayBack:
         Reads the corresponding screenshot for the current UI log.
         :return:
         """
-        image_name = f"{int(self.ui.log_id) + 1}.png"  # +1 because screenshot lag
-        image_path = os.path.join(self.image_directory, image_name)
-        self.image_clean = cv2.imread(image_path)
-        self.draw()
+        self.draw_eye()
         if self.image_drawn is not None:
             if self.playback:
                 cv2.imshow("Analysis Playback", self.image_drawn)
@@ -173,16 +171,24 @@ class PlayBack:
             if self.video:
                 self.writer.write(self.image_drawn)
 
-    def draw(self):
+    def draw_eye(self):
+        """
+        Add visualisations to the current screenshot e.g. bounding boxes, fixation point, channel names etc
+        :return:
+        """
+        if self.image_with_ui is not None:
+            self.image_drawn = deepcopy(self.image_with_ui)
+            self.eye.draw(self.image_drawn)
+            self.draw_gaze_target(self.image_drawn)
+
+    def draw_ui(self):
         """
         Add visualisations to the current screenshot e.g. bounding boxes, fixation point, channel names etc
         :return:
         """
         if self.image_clean is not None:
-            self.image_drawn = deepcopy(self.image_clean)
-            self.image_drawn = self.ui.draw(self.image_drawn)
-            self.eye.draw(self.image_drawn)
-            self.draw_gaze_target(self.image_drawn)
+            self.image_with_ui = deepcopy(self.image_clean)
+            self.image_with_ui = self.ui.draw(self.image_with_ui)
 
     def draw_gaze_target(self, image):
         pos = 350
@@ -196,6 +202,14 @@ class PlayBack:
         image = cv2.putText(image, f"gaze time: {self.gaze_time}", (20, pos), self.font_type, self.font_scale,
                             self.font_color, self.font_thick, cv2.LINE_AA)
         return image
+
+    def next_screenshot(self):
+        image_name = f"{int(self.ui.log_id) + 1}.png"  # +1 because screenshot lag
+        image_path = os.path.join(self.image_directory, image_name)
+        self.image_clean = cv2.imread(image_path)
+        self.image_with_ui = None
+        self.image_drawn = None
+        self.draw_ui()
 
     def next_eye_log(self):
         """
