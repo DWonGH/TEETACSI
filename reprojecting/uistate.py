@@ -77,8 +77,6 @@ class UIState:
             self.edf_file_path = data['edf_path']
             self.time_position = data['time']
             self.time_scale = data['time_scale']
-            self.montage_file_name = data['montage_file']
-            self.load_channels_from_montage()
             self.graph_width = data['graph_dimensions'][0]
             self.graph_height = data['graph_dimensions'][1]
             graph_box = data['graph_box']
@@ -87,56 +85,53 @@ class UIState:
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
             self.last_event = 'FILE_OPENED'
+            self.montage_file_name = data['montage_file']
             print("Reading edf file")
             if os.path.exists(self.edf_file_path):
                 self.edf = EDFreader(self.edf_file_path)
             else:
                 user_input = input(f"The path to the edf file ({self.edf_file_path}) is invalid. Please specify the path"
-                                    f"to the edf file. ")
+                                   f"to the edf file. ")
                 assert os.path.exists(user_input), f"The path {user_input} does not lead to a valid edf file."
                 self.edf = EDFreader(self.edf_file_path)
             assert self.edf is not None
-            self.update_channel_data()
+            self.load_channels_from_montage()
             self.opened = True
         elif event == 'FILE_CLOSED':
             return False
         elif event == 'MONTAGE_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
-            if self.opened: self.update_channel_data()
             self.last_event = 'MONTAGE_CHANGED'
         elif event == 'CHANNELS_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
-            if self.opened: self.update_channel_data()
             self.last_event = 'CHANNELS_CHANGED'
         elif event == 'FILTER_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
-            if self.opened: self.update_channel_data()
             self.last_event = 'FILTER_CHANGED'
         elif event == 'AMPLITUDE_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
-            if self.opened: self.update_channel_data()
             self.last_event = 'AMPLITUDE CHANGED'
         elif event == 'TIMESCALE_CHANGED':
             self.time_scale = data['time_scale']
-            if self.opened: self.update_channel_data()
+            self.time_position = data['time']
+            if self.opened: self.update_channels()
             self.last_event = 'TIMESCALE_CHANGED'
         elif event == 'TIME_POSITION_CHANGED':
             self.time_position = data['time']
-            if self.opened: self.update_channel_data()
+            if self.opened: self.update_channels()
             self.last_event = 'TIME_POSITION_CHANGED'
         elif event == 'VERTICAL_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
-            if self.opened: self.update_channel_data()
             self.last_event = 'VERTICAL_CHANGED'
         elif event == 'ZOOM_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
-            if self.opened: self.update_channel_data()
+            if self.opened: self.update_channels()
             self.time_scale = data['time_scale']
             self.time_position = data['time']
             self.last_event = 'ZOOM_CHANGED'
@@ -146,7 +141,7 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
-            if self.opened: self.update_channel_data()
+            if self.opened: self.update_channels()
             self.last_event = 'WINDOW_MOVED'
         elif entry['event'] == 'GRAPH_RESIZED':
             self.graph_width = data['graph_dimensions'][0]
@@ -156,7 +151,7 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
-            if self.opened: self.update_channel_data()
+            if self.opened: self.update_channels()
             self.last_event = 'GRAPH_RESIZED'
         elif event == 'MODAL_OPENED':
             self.last_event = 'MODAL_OPENED'
@@ -197,6 +192,8 @@ class UIState:
             doc = etree.parse(self.montage_file_path)
             signals = doc.xpath('signalcomposition')
             self.channels.clear()
+            time_position = self.time_position_to_seconds()
+            time_scale = self.timescale_to_seconds()
             for i, signal in enumerate(signals):
                 # Channel info
                 idx = i
@@ -223,25 +220,27 @@ class UIState:
                 # Update the channel baseline
                 self.channels[i].update_baseline(self.graph_height, len(self.channels), self.graph_top_left[1])
 
-    def update_channel_data(self):
-        """
-        Reconstruct the signals for the current state.
-        This is not complete, and the signals appear to be skewed left or right~?
-        :return:
-        """
+                self.update_channel_data(i, self.channels[i], time_position, time_scale)
+
+    def update_channels(self):
         time_position = self.time_position_to_seconds()
         time_scale = self.timescale_to_seconds()
         for i, channel in enumerate(self.channels):
-            start = int(self.edf.getSampleFrequency(i) * time_position)
-            num_samples_to_read = int(self.edf.getSampleFrequency(i) * time_scale)
-            print(num_samples_to_read)
-            if num_samples_to_read > 0:
-                self.edf.rewind(i)
-                start = self.edf.fseek(i, start, 0)
-                channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
-                assert num_samples_to_read == self.edf.readSamples(i, channel.data, num_samples_to_read)
-        # TODO: Apply filters to data
-        # TODO: Apply amplitude to data
+            self.update_channel_data(i, channel, time_position, time_scale)
+
+    def update_channel_data(self, i, channel, time_position, time_scale):
+        """
+        Reconstruct the signals for the current state.
+        :return:
+        """
+        start = int(self.edf.getSampleFrequency(i) * time_position)
+        num_samples_to_read = int(self.edf.getSampleFrequency(i) * time_scale)
+        channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
+        if num_samples_to_read > 0:
+            self.edf.rewind(i)
+            start = self.edf.fseek(i, start, 0)
+            self.edf.readSamples(i, channel.data, num_samples_to_read)
+
 
     def time_position_to_seconds(self):
         """
@@ -253,9 +252,24 @@ class UIState:
             x = datetime.strptime(x, '%H:%M:%S')
             return x.second + x.minute * 60 + x.hour * 3600
         except ValueError:
+            pass
+        try:
             x = self.time_position.split('(')[1].strip(')')
             x = datetime.strptime(x, '%H:%M:%S.%f')
             return x.second + x.minute * 60 + x.hour * 3600
+        except ValueError:
+            pass
+        try:
+            x = self.time_position.split('(')[1].strip(')')
+            x = datetime.strptime(x, '-%H:%M:%S')
+            return x.second + x.minute * 60 + x.hour * 3600
+        except ValueError:
+            pass
+
+        x = self.time_position.split('(')[1].strip(')')
+        x = datetime.strptime(x, '-%H:%M:%S.%f')
+        return x.second + x.minute * 60 + x.hour * 3600
+
 
     def time_position_to_samples(self, channel):
         x = self.time_position.split('(')[1].strip(')')
@@ -370,30 +384,31 @@ class UIState:
             tasks.append((self.graph_width, self.graph_top_left[0], ppc, channel))
 
         results = self.pool.starmap(self.draw_signal, tasks)
-
         for i in range(len(results)):
-            for j in range(len(results[i])-2):
-                image = cv2.line(image, (results[i][j][0], results[i][j][1]), (results[i][j+1][0], results[i][j+1][1]), (255, 0, 0), 1)
+            if results[i] is not None:
+                for j in range(len(results[i])-2):
+                    image = cv2.line(image, (results[i][j][0], results[i][j][1]), (results[i][j+1][0], results[i][j+1][1]), (255, 0, 0), 1)
 
         return image
-
-    @staticmethod
-    def init(l):
-        global lock
-        lock = l
 
     @staticmethod
     def draw_signal(graph_width, graph_left, ppc, channel):
         if isinstance(channel.data, numpy.ndarray):
             num_samples = channel.data.size
-            arr = numpy.empty((num_samples, 2), dtype=numpy.int)
-            spacing = graph_width / num_samples
-            for point in range(channel.data.size - 1):
-                # Yc = s * Yr + o
-                x = int(int(point * spacing) + graph_left)
-                y = int((((float(channel.voltspercm) / ppc) * channel.data[point]) * -1) + channel.baseline)
-                arr[point][0] = x
-                arr[point][1] = y
-            return arr
+            if num_samples > 0:
+                arr = numpy.empty((num_samples, 2), dtype=numpy.int)
+                spacing = graph_width / num_samples
+                for point in range(channel.data.size - 1):
+                    # Yc = s * Yr + o
+                    x = int(int(point * spacing) + graph_left)
+                    y = int((((float(channel.voltspercm) / ppc) * channel.data[point]) * -1) + channel.baseline)
+                    arr[point][0] = x
+                    arr[point][1] = y
+                return arr
+
+    @staticmethod
+    def init(l):
+        global lock
+        lock = l
 
 

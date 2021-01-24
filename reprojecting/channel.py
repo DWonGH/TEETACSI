@@ -1,3 +1,4 @@
+from scipy import signal
 from lxml import etree
 import os
 from io import StringIO, BytesIO
@@ -24,7 +25,28 @@ class Channel:
         self.baseline = int(self.baseline)
 
     def apply_filters(self):
-        pass
+        for f in self.fid_filters:
+            if f.model == 0:
+                btype = 'lowpass'
+            elif f.model == 1:
+                btype = 'highpass'
+            elif f.model == 2:
+                btype = 'bandpass'
+            if f.ftype == 0:
+                b, a = signal.butter(f.order, [f.low, f.high], btype=btype, analog=False, output='ba', fs=None)
+                output = signal.filtfilt(b, a, self.data)
+
+    def butter_lowpass_filter(self, data, cutoff_freq, nyq_freq, order=4):
+        # Source: https://github.com/guillaume-chevalier/filtering-stft-and-laplace-transform
+        b, a = self.butter_lowpass(cutoff_freq, nyq_freq, order=order)
+        y = signal.filtfilt(b, a, data)
+        return y
+
+    @staticmethod
+    def butter_lowpass(cutoff, nyq_freq, order=4):
+        normal_cutoff = float(cutoff) / nyq_freq
+        b, a = signal.butter(order, [normal_cutoff], btype='lowpass')
+        return b, a
 
     def apply_amplitude(self):
         pass

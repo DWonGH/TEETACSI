@@ -1,2 +1,3 @@
+scipy
 opencv-python
 lxml
