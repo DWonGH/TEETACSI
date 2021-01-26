@@ -13,12 +13,12 @@ from eyestate import EyeState
 
 class PlayBack:
 
-    def __init__(self, directory=None, playback=False, video=False):
+    def __init__(self, directory=None, playback=False, video=False, signals=False):
         assert (os.path.exists(directory)), f"The specified input directory is invalid {directory}"
 
         # State trackers
         self.eye = EyeState()
-        self.ui = UIState()
+        self.ui = UIState(multi=True, signals=signals)
         self.ui_next = UIState()
         self.gaze_targets = []
         self.gaze_time = None
@@ -54,6 +54,7 @@ class PlayBack:
         self.image_height, self.image_width, _ = self.image_clean.shape
         self.eye.image_width = self.image_width
         self.eye.image_height = self.image_height
+        self.image_with_ui = None
         self.image_drawn = None
 
         # Display options
@@ -69,6 +70,8 @@ class PlayBack:
         assert playback or video, "Need to specify an option to visualise"
         print(f"Visualising recording at {os.path.dirname(self.ui_log_path)}")
         print(f"playback {playback}, video {video}")
+
+        self.signals = signals
 
         self.ui_line = None
         self.next_ui_line = None
@@ -107,8 +110,12 @@ class PlayBack:
                 # Read UI changes as time progresses according to the eye data
                 if self.eye.time_stamp > self.ui_next.current_timestamp:
                     self.next_ui_log()
+                    self.next_screenshot()
 
-                self.analyse_fixation()
+                if not self.signals:
+                    self.analyse_fixation_baselines()
+                else:
+                    self.analyse_fixation_signals()
 
                 # Display / write
                 self.visualise()
@@ -124,49 +131,7 @@ class PlayBack:
             if self.video:
                 self.writer.release()
 
-    def next_eye_log(self):
-        """
-        Reads the next line from the gaze/ fixation data file
-        :return:
-        """
-        eye_log = self.eye_log.readline()
-        if eye_log is "":
-            return False
-        eye_log.strip()
-        eye_log = json.loads(eye_log)
-        self.eye.update(eye_log)
-        return True
-
-    def next_ui_log(self):
-        """
-        Reads the next line from the UI tracking log. Keeps track of the current log, and the log in front. Use the timestamp
-        from the next log to trigger changes in the playback.
-        :return:
-        """
-        self.ui_line = self.next_ui_line
-        self.next_ui_line = self.ui_log.readline()
-        entry = json.loads(self.ui_line)
-        next_entry = json.loads(self.next_ui_line)
-        self.ui.update(entry)
-        self.ui_next.update(next_entry)
-
-    def visualise(self):
-        """
-        Reads the corresponding screenshot for the current UI log.
-        :return:
-        """
-        image_name = f"{int(self.ui.log_id) + 1}.png"  # +1 because screenshot lag
-        image_path = os.path.join(self.image_directory, image_name)
-        self.image_clean = cv2.imread(image_path)
-        self.draw()
-        if self.image_drawn is not None:
-            if self.playback:
-                cv2.imshow("Analysis Playback", self.image_drawn)
-                cv2.waitKey(1)
-            if self.video:
-                self.writer.write(self.image_drawn)
-
-    def analyse_fixation(self):
+    def analyse_fixation_baselines(self):
         """
         Identify which channels were being looked at and at what time
         :return: A list of channels under the gaze point, the time the user was looking at
@@ -198,16 +163,40 @@ class PlayBack:
             self.gaze_targets.append("Off")
             self.gaze_time = "Off"
 
-    def draw(self):
+    def analyse_fixation_signals(self):
+        raise NotImplementedError
+
+    def visualise(self):
+        """
+        Reads the corresponding screenshot for the current UI log.
+        :return:
+        """
+        self.draw_eye()
+        if self.image_drawn is not None:
+            if self.playback:
+                cv2.imshow("Analysis Playback", self.image_drawn)
+                cv2.waitKey(1)
+            if self.video:
+                self.writer.write(self.image_drawn)
+
+    def draw_eye(self):
+        """
+        Add visualisations to the current screenshot e.g. bounding boxes, fixation point, channel names etc
+        :return:
+        """
+        if self.image_with_ui is not None:
+            self.image_drawn = deepcopy(self.image_with_ui)
+            self.eye.draw(self.image_drawn)
+            self.draw_gaze_target(self.image_drawn)
+
+    def draw_ui(self):
         """
         Add visualisations to the current screenshot e.g. bounding boxes, fixation point, channel names etc
         :return:
         """
         if self.image_clean is not None:
-            self.image_drawn = deepcopy(self.image_clean)
-            self.image_drawn = self.ui.draw(self.image_drawn)
-            self.eye.draw(self.image_drawn)
-            self.draw_gaze_target(self.image_drawn)
+            self.image_with_ui = deepcopy(self.image_clean)
+            self.image_with_ui = self.ui.draw(self.image_with_ui)
 
     def draw_gaze_target(self, image):
         pos = 350
@@ -220,8 +209,41 @@ class PlayBack:
         pos += step
         image = cv2.putText(image, f"gaze time: {self.gaze_time}", (20, pos), self.font_type, self.font_scale,
                             self.font_color, self.font_thick, cv2.LINE_AA)
-
         return image
+
+    def next_screenshot(self):
+        image_name = f"{int(self.ui.log_id) + 1}.png"  # +1 because screenshot lag
+        image_path = os.path.join(self.image_directory, image_name)
+        self.image_clean = cv2.imread(image_path)
+        self.image_with_ui = None
+        self.image_drawn = None
+        self.draw_ui()
+
+    def next_eye_log(self):
+        """
+        Reads the next line from the gaze/ fixation data file
+        :return:
+        """
+        eye_log = self.eye_log.readline()
+        if eye_log is "":
+            return False
+        eye_log.strip()
+        eye_log = json.loads(eye_log)
+        self.eye.update(eye_log)
+        return True
+
+    def next_ui_log(self):
+        """
+        Reads the next line from the UI tracking log. Keeps track of the current log, and the log in front. Use the timestamp
+        from the next log to trigger changes in the playback.
+        :return:
+        """
+        self.ui_line = self.next_ui_line
+        self.next_ui_line = self.ui_log.readline()
+        entry = json.loads(self.ui_line)
+        next_entry = json.loads(self.next_ui_line)
+        self.ui.update(entry)
+        self.ui_next.update(next_entry)
 
     def finish(self):
         """

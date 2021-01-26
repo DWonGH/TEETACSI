@@ -1,3 +1,4 @@
+from scipy import signal
 from lxml import etree
 import os
 from io import StringIO, BytesIO
@@ -24,7 +25,28 @@ class Channel:
         self.baseline = int(self.baseline)
 
     def apply_filters(self):
-        pass
+        for f in self.fid_filters:
+            if f.model == 0:
+                btype = 'lowpass'
+            elif f.model == 1:
+                btype = 'highpass'
+            elif f.model == 2:
+                btype = 'bandpass'
+            if f.ftype == 0:
+                b, a = signal.butter(f.order, [f.low, f.high], btype=btype, analog=False, output='ba', fs=None)
+                output = signal.filtfilt(b, a, self.data)
+
+    def butter_lowpass_filter(self, data, cutoff_freq, nyq_freq, order=4):
+        # Source: https://github.com/guillaume-chevalier/filtering-stft-and-laplace-transform
+        b, a = self.butter_lowpass(cutoff_freq, nyq_freq, order=order)
+        y = signal.filtfilt(b, a, data)
+        return y
+
+    @staticmethod
+    def butter_lowpass(cutoff, nyq_freq, order=4):
+        normal_cutoff = float(cutoff) / nyq_freq
+        b, a = signal.butter(order, [normal_cutoff], btype='lowpass')
+        return b, a
 
     def apply_amplitude(self):
         pass
@@ -37,33 +59,3 @@ class Channel:
         print(f"screen_offset: {self.screen_offset}")
         print(f"polarity: {self.polarity}")
         print(f"filter_cnt: {self.filter_cnt}")
-
-
-
-# montage_file_path = os.path.join('E:\\computer_science\\living_lab\\2020TEETACSI\\Analyzer\\REDFBrowser\\EDFbrowser\\scripts\\input_data\montages\\41.mtg')
-# print(montage_file_path)
-#
-# doc = etree.parse(montage_file_path)
-# signals = doc.xpath('signalcomposition')
-#
-# channels = []
-# for i, signal in enumerate(signals):
-#     idx = i
-#     label = signal.xpath('signal/label')
-#     factor = signal.xpath('signal/factor')
-#     voltpercm = signal.xpath('voltpercm')
-#     screen_offset = signal.xpath('screen_offset')
-#     polarity = signal.xpath('polarity')
-#     filter_cnt = signal.xpath('filter_cnt')
-#     channels.append(Channel(idx, label[0].text, factor[0].text, voltpercm[0].text, screen_offset[0].text, polarity[0].text, filter_cnt[0].text))
-#     filters = signal.xpath('fidfilter')
-#     if len(filters) > 0:
-#         for f in filters:
-#             ftype = f.xpath('type')
-#             freq_1 = f.xpath('frequency')
-#             freq_2 = f.xpath('frequency2')
-#             ripple = f.xpath('ripple')
-#             order = f.xpath('order')
-#             model = f.xpath('model')
-#             channels[i].fid_filters.append(FidFilter(ftype[0].text, freq_1[0].text, freq_2[0].text, ripple[0].text, order[0].text, model[0].text))
-#             channels[i].fid_filters[0].print_filter()

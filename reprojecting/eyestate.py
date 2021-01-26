@@ -25,8 +25,18 @@ class EyeState:
         Read an entry from the EYE log file and reconstruct the gaze using the information
         :param data: A line from the EYE log loaded into a dictionary
         """
+        # Convert the timestamp from string. Handle format if the stamp includes sub-second time
         timestamp = data["timestamp"]
-        self.time_stamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+        try:
+            self.time_stamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
+        except ValueError:
+            pass
+        try:
+            self.time_stamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pass
+
+        # Fix and update the coordinates
         if "nan" not in data["left_eye"]:
             self.left_eye = self.format_coords(data["left_eye"])
         else:
