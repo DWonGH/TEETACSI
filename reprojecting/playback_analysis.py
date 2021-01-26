@@ -13,12 +13,12 @@ from eyestate import EyeState
 
 class PlayBack:
 
-    def __init__(self, directory=None, playback=False, video=False):
+    def __init__(self, directory=None, playback=False, video=False, signals=False):
         assert (os.path.exists(directory)), f"The specified input directory is invalid {directory}"
 
         # State trackers
         self.eye = EyeState()
-        self.ui = UIState(multi=True)
+        self.ui = UIState(multi=True, signals=signals)
         self.ui_next = UIState()
         self.gaze_targets = []
         self.gaze_time = None
@@ -71,6 +71,8 @@ class PlayBack:
         print(f"Visualising recording at {os.path.dirname(self.ui_log_path)}")
         print(f"playback {playback}, video {video}")
 
+        self.signals = signals
+
         self.ui_line = None
         self.next_ui_line = None
 
@@ -110,7 +112,10 @@ class PlayBack:
                     self.next_ui_log()
                     self.next_screenshot()
 
-                self.analyse_fixation()
+                if not self.signals:
+                    self.analyse_fixation_baselines()
+                else:
+                    self.analyse_fixation_signals()
 
                 # Display / write
                 self.visualise()
@@ -126,7 +131,7 @@ class PlayBack:
             if self.video:
                 self.writer.release()
 
-    def analyse_fixation(self):
+    def analyse_fixation_baselines(self):
         """
         Identify which channels were being looked at and at what time
         :return: A list of channels under the gaze point, the time the user was looking at
@@ -157,6 +162,9 @@ class PlayBack:
         else:
             self.gaze_targets.append("Off")
             self.gaze_time = "Off"
+
+    def analyse_fixation_signals(self):
+        raise NotImplementedError
 
     def visualise(self):
         """

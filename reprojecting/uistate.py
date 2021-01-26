@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 import time
@@ -21,7 +22,7 @@ class UIState:
             self.pool.close()
             self.pool.join()
 
-    def __init__(self, montages_directory=None, multi=False):
+    def __init__(self, montages_directory=None, multi=False, signals=False):
         """
         Reconstructs the state and tracks the changes in a UI log file
         :param montages_directory: Need to specify the location of the corresponding montages that were saved with the log.
@@ -41,6 +42,7 @@ class UIState:
         self.num_channels = None
         self.channels = []
         self.opened = False
+        self.signals = signals
 
         self.montages_directory = montages_directory
         self.montage_file_name = None
@@ -54,7 +56,7 @@ class UIState:
         self.font_type = cv2.FONT_HERSHEY_PLAIN
 
         self.multi = multi
-        if self.multi:
+        if self.multi and self.signals:
             self.num_cores = multiprocessing.cpu_count()
             lock = multiprocessing.Lock()
             self.pool = multiprocessing.Pool(initializer=self.init, processes=self.num_cores, initargs=(lock,))
@@ -101,6 +103,7 @@ class UIState:
             return False
         elif event == 'MONTAGE_CHANGED':
             self.montage_file_name = data['montage_file']
+            self.time_scale = data['time']
             self.load_channels_from_montage()
             self.last_event = 'MONTAGE_CHANGED'
         elif event == 'CHANNELS_CHANGED':
@@ -118,11 +121,11 @@ class UIState:
         elif event == 'TIMESCALE_CHANGED':
             self.time_scale = data['time_scale']
             self.time_position = data['time']
-            if self.opened: self.update_channels()
+            if self.opened and self.signals: self.update_channels()
             self.last_event = 'TIMESCALE_CHANGED'
         elif event == 'TIME_POSITION_CHANGED':
             self.time_position = data['time']
-            if self.opened: self.update_channels()
+            if self.opened and self.signals: self.update_channels()
             self.last_event = 'TIME_POSITION_CHANGED'
         elif event == 'VERTICAL_CHANGED':
             self.montage_file_name = data['montage_file']
@@ -131,7 +134,7 @@ class UIState:
         elif event == 'ZOOM_CHANGED':
             self.montage_file_name = data['montage_file']
             self.load_channels_from_montage()
-            if self.opened: self.update_channels()
+            if self.opened and self.signals: self.update_channels()
             self.time_scale = data['time_scale']
             self.time_position = data['time']
             self.last_event = 'ZOOM_CHANGED'
@@ -141,7 +144,7 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
-            if self.opened: self.update_channels()
+            if self.opened and self.signals: self.update_channels()
             self.last_event = 'WINDOW_MOVED'
         elif entry['event'] == 'GRAPH_RESIZED':
             self.graph_width = data['graph_dimensions'][0]
@@ -151,7 +154,7 @@ class UIState:
             self.graph_top_right = (graph_box['top_right'][0], graph_box['top_right'][1])
             self.graph_bottom_left = (graph_box['bottom_left'][0], graph_box['bottom_left'][1])
             self.graph_bottom_right = (graph_box['bottom_right'][0], graph_box['bottom_right'][1])
-            if self.opened: self.update_channels()
+            if self.opened and self.signals: self.update_channels()
             self.last_event = 'GRAPH_RESIZED'
         elif event == 'MODAL_OPENED':
             self.last_event = 'MODAL_OPENED'
@@ -188,14 +191,17 @@ class UIState:
             self.montage_file_path = os.path.join(self.montages_directory, self.montage_file_name)
             assert os.path.exists(self.montage_file_path)
 
-            # Read in the channels from the mtg file
+            # .mtg files can be parsed like XML
             doc = etree.parse(self.montage_file_path)
-            signals = doc.xpath('signalcomposition')
-            self.channels.clear()
+
+            # Need to know time and scale to correct data from edf
             time_position = self.time_position_to_seconds()
             time_scale = self.timescale_to_seconds()
+
+            # Parse and read in the channels from the mtg file
+            signals = doc.xpath('signalcomposition')
+            self.channels.clear()
             for i, signal in enumerate(signals):
-                # Channel info
                 idx = i
                 label = signal.xpath('signal/label')
                 factor = signal.xpath('signal/factor')
@@ -220,7 +226,9 @@ class UIState:
                 # Update the channel baseline
                 self.channels[i].update_baseline(self.graph_height, len(self.channels), self.graph_top_left[1])
 
-                self.update_channel_data(i, self.channels[i], time_position, time_scale)
+                # Load the corresponding signal data from the edf
+                if self.signals:
+                    self.update_channel_data(i, self.channels[i], time_position, time_scale)
 
     def update_channels(self):
         time_position = self.time_position_to_seconds()
@@ -233,19 +241,37 @@ class UIState:
         Reconstruct the signals for the current state.
         :return:
         """
-        start = int(self.edf.getSampleFrequency(i) * time_position)
-        num_samples_to_read = int(self.edf.getSampleFrequency(i) * time_scale)
-        channel.data = numpy.empty(num_samples_to_read, dtype=numpy.float_)
-        if num_samples_to_read > 0:
-            self.edf.rewind(i)
-            start = self.edf.fseek(i, start, 0)
-            self.edf.readSamples(i, channel.data, num_samples_to_read)
 
+        edf_seconds = int(self.edf.getTotalSamples(i) / self.edf.getSampleFrequency(i))
+        sample_position = int(self.edf.getSampleFrequency(i) * time_position)
+        samples_to_read = int(self.edf.getSampleFrequency(i) * time_scale)
+        buffer_seconds = int(samples_to_read / self.edf.getSampleFrequency(i))
+        channel.data = numpy.empty(samples_to_read, dtype=numpy.float_)
+        if samples_to_read > 1:
+            if time_position + buffer_seconds < 0:
+                channel.data[0:samples_to_read] = numpy.nan
+            elif time_position < 0:
+                self.edf.fseek(i, 0, 0)
+                self.edf.readSamples(i, channel.data, samples_to_read)
+                channel.data = numpy.roll(channel.data, (sample_position*-1))
+                channel.data[0:(sample_position*-1)] = numpy.nan
+            elif time_position + buffer_seconds > edf_seconds:
+                seconds_over = (time_position + buffer_seconds) - edf_seconds
+                samples_over = self.edf.getSampleFrequency(i) * seconds_over
+                self.edf.fseek(i, sample_position, 0)
+                self.edf.readSamples(i, channel.data, samples_over)
+                #channel.data = numpy.roll(channel.data, (seconds_over * -1))
+                channel.data[int(samples_over):int(samples_to_read)] = numpy.nan
+            elif time_position >= edf_seconds:
+                channel.data[0:samples_to_read] = numpy.nan
+            else:
+                self.edf.fseek(i, sample_position, 0)
+                self.edf.readSamples(i, channel.data, samples_to_read)
 
     def time_position_to_seconds(self):
         """
         Convert the recorded time string in the log
-        :return:
+        :return: An int describing the time in seconds
         """
         try:
             x = self.time_position.split('(')[1].strip(')')
@@ -265,11 +291,9 @@ class UIState:
             return x.second + x.minute * 60 + x.hour * 3600
         except ValueError:
             pass
-
         x = self.time_position.split('(')[1].strip(')')
         x = datetime.strptime(x, '-%H:%M:%S.%f')
         return x.second + x.minute * 60 + x.hour * 3600
-
 
     def time_position_to_samples(self, channel):
         x = self.time_position.split('(')[1].strip(')')
@@ -307,7 +331,8 @@ class UIState:
         if not (self.last_event == "MENU_OPENED" or self.last_event == "MENU_SEARCH" or self.last_event == "MENU_CLOSED" or self.last_event == "MODAL_OPENED" or self.last_event == "MODAL_CLOSED" or self.last_event == "WINDOW_MINIMISED"):
             image = self.draw_graph_bbox(image)
             image = self.draw_channel_baselines(image)
-            image = self.draw_channel_signals(image)
+            if self.signals:
+                image = self.draw_channel_signals(image)
         image = self.draw_log_info(image)
         return image
 
@@ -376,7 +401,7 @@ class UIState:
 
         # Scale is recorded in EDFBrowser as Volts per CM. So we need to find out our scale from pixels per inch to
         # pixels per cm
-        dpi = 72
+        dpi = 72  # this might need to change depending on what screen it was recorded on??
         ppc = dpi * 2.54
 
         tasks = []
@@ -399,11 +424,12 @@ class UIState:
                 arr = numpy.empty((num_samples, 2), dtype=numpy.int)
                 spacing = graph_width / num_samples
                 for point in range(channel.data.size - 1):
-                    # Yc = s * Yr + o
-                    x = int(int(point * spacing) + graph_left)
-                    y = int((((float(channel.voltspercm) / ppc) * channel.data[point]) * -1) + channel.baseline)
-                    arr[point][0] = x
-                    arr[point][1] = y
+                    if not math.isnan(channel.data[point]):
+                        # Yc = s * Yr + o
+                        x = int(int(point * spacing) + graph_left)
+                        y = int((((float(channel.voltspercm) / ppc) * channel.data[point]) * -1) + channel.baseline)
+                        arr[point][0] = x
+                        arr[point][1] = y
                 return arr
 
     @staticmethod
