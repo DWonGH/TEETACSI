@@ -120,10 +120,10 @@ class PlayBack:
                 # Display / write
                 self.visualise()
 
-                # sys.stdout.write(f"({eye_log_id}/{self.eye.num_logs})")
-                # sys.stdout.flush()
-                # sys.stdout.write('\r')
-                # sys.stdout.flush()
+                sys.stdout.write(f"({eye_log_id}/{self.eye.num_logs})")
+                sys.stdout.flush()
+                sys.stdout.write('\r')
+                sys.stdout.flush()
                 eye_log_id += 1
         except Exception as e:
             traceback.print_exc()
@@ -164,7 +164,8 @@ class PlayBack:
             self.gaze_time = "Off"
 
     def analyse_fixation_signals(self):
-        raise NotImplementedError
+        # Use this temporarily for debugging signal reprojection
+        self.analyse_fixation_baselines()
 
     def visualise(self):
         """

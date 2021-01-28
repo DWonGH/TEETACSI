@@ -57,9 +57,10 @@ class UIState:
 
         self.multi = multi
         if self.multi and self.signals:
+            # Use multi core for calculating signals
             self.num_cores = multiprocessing.cpu_count()
             lock = multiprocessing.Lock()
-            self.pool = multiprocessing.Pool(initializer=self.init, processes=self.num_cores, initargs=(lock,))
+            self.pool = multiprocessing.Pool(initializer=self.init, processes=self.num_cores-1, initargs=(lock,))
 
     def update(self, entry):
         """
@@ -247,14 +248,25 @@ class UIState:
         samples_to_read = int(self.edf.getSampleFrequency(i) * time_scale)
         buffer_seconds = int(samples_to_read / self.edf.getSampleFrequency(i))
         channel.data = numpy.empty(samples_to_read, dtype=numpy.float_)
+
         if samples_to_read > 1:
+
+            # EDFBrowser allows the user to scroll before the starting point of the recording, or past the end of the recording.
+            # E.g. the user can scroll to -1 hour from the start of the recording if they wanted. We need read the data
+            # from the EDF accordingly and set the buffer to nan values if we go past the start or end points.
+
+            # The user has scrolled completely past the start of the recording
             if time_position + buffer_seconds < 0:
                 channel.data[0:samples_to_read] = numpy.nan
+
+            # The user has scrolled partly past the start of the recording
             elif time_position < 0:
                 self.edf.fseek(i, 0, 0)
                 self.edf.readSamples(i, channel.data, samples_to_read)
                 channel.data = numpy.roll(channel.data, (sample_position*-1))
                 channel.data[0:(sample_position*-1)] = numpy.nan
+
+            # The user has scrolled partly past the end of the recording
             elif time_position + buffer_seconds > edf_seconds:
                 seconds_over = (time_position + buffer_seconds) - edf_seconds
                 samples_over = self.edf.getSampleFrequency(i) * seconds_over
@@ -262,8 +274,12 @@ class UIState:
                 self.edf.readSamples(i, channel.data, samples_over)
                 #channel.data = numpy.roll(channel.data, (seconds_over * -1))
                 channel.data[int(samples_over):int(samples_to_read)] = numpy.nan
+
+            # The user has scrolled completely past the recording
             elif time_position >= edf_seconds:
                 channel.data[0:samples_to_read] = numpy.nan
+
+            # Otherwise the user is somewhere in the middle of the recording
             else:
                 self.edf.fseek(i, sample_position, 0)
                 self.edf.readSamples(i, channel.data, samples_to_read)

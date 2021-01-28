@@ -18,7 +18,7 @@ if __name__ == "__main__":
     # args.input = input_dir
     # args.playback = True
     # args.video = True
-    # args.signals = False
+    # args.signals = True
     print(f"Running TEETACSI data processing")
     playback = PlayBack(args.input, args.playback, args.video, args.signals)
     playback.process()
