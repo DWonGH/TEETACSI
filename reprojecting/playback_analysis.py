@@ -13,11 +13,14 @@ from eyestate import EyeState
 
 class PlayBack:
 
-    def __init__(self, directory=None, playback=False, video=False, signals=False):
+    def __init__(self, directory=None, playback=False, video=False, signals=False, ui_mode=False):
         assert (os.path.exists(directory)), f"The specified input directory is invalid {directory}"
 
+        self.ui_mode = ui_mode
+
         # State trackers
-        self.eye = EyeState()
+        if not self.ui_mode:
+            self.eye = EyeState()
         self.ui = UIState(multi=True, signals=signals)
         self.ui_next = UIState()
         self.gaze_targets = []
@@ -30,12 +33,13 @@ class PlayBack:
         assert (self.ui_log.closed is False)
 
         # Setup EYE log
-        self.eye_log_path = os.path.join(directory, 'gaze_data.txt')
-        assert (os.path.exists(self.eye_log_path)), f"The specified eye log is invalid {self.eye_log_path}"
-        self.eye.num_logs = sum(1 for line in open(self.eye_log_path))
-        assert self.eye.num_logs > 0, "There were no logs in the eye log"
-        self.eye_log = open(self.eye_log_path, 'r')
-        assert (self.eye_log.closed is False)
+        if not self.ui_mode:
+            self.eye_log_path = os.path.join(directory, 'gaze_data.txt')
+            assert (os.path.exists(self.eye_log_path)), f"The specified eye log is invalid {self.eye_log_path}"
+            self.eye.num_logs = sum(1 for line in open(self.eye_log_path))
+            assert self.eye.num_logs > 0, "There were no logs in the eye log"
+            self.eye_log = open(self.eye_log_path, 'r')
+            assert (self.eye_log.closed is False)
 
         # Setup montages directory
         self.ui.montages_directory = os.path.join(directory, 'uilog', 'montages')
@@ -52,8 +56,9 @@ class PlayBack:
         self.image_clean = cv2.imread(image_path)
         assert self.image_clean is not None
         self.image_height, self.image_width, _ = self.image_clean.shape
-        self.eye.image_width = self.image_width
-        self.eye.image_height = self.image_height
+        if not self.ui_mode:
+            self.eye.image_width = self.image_width
+            self.eye.image_height = self.image_height
         self.image_with_ui = None
         self.image_drawn = None
 
@@ -82,6 +87,35 @@ class PlayBack:
         self.font_scale = 2
         self.font_thick = 2
         self.font_type = cv2.FONT_HERSHEY_PLAIN
+
+        if self.ui_mode:
+            self.process_ui_mode()
+        else:
+            self.process()
+
+    def process_ui_mode(self):
+        """
+        Sometimes it is easier to test the UI tracking without having to record full session with eye data. Use this to
+        produce a directory with each screenshot and the reprojections. Specify the --ui on command line or set self.ui_mode
+        to True
+        :return:
+        """
+        visualise_path = os.path.join(os.path.dirname(self.ui_log_path), "visualise")
+        if not os.path.exists(visualise_path):
+            os.makedirs(visualise_path)
+        while True:
+            line = self.ui_log.readline()
+            if line == "":
+                break
+            ui_entry = json.loads(line)
+            self.ui.update(ui_entry)
+            self.next_screenshot()
+            self.draw_ui()
+            if self.image_with_ui is not None:
+                cv2.imwrite(os.path.join(visualise_path, f"{int(self.ui.log_id) + 1}.png"), self.image_with_ui)
+                if self.playback:
+                    cv2.imshow("Analysis Playback", self.image_with_ui)
+                    cv2.waitKey(1)
 
     def process(self):
         """
@@ -241,10 +275,13 @@ class PlayBack:
         """
         self.ui_line = self.next_ui_line
         self.next_ui_line = self.ui_log.readline()
+        if self.next_ui_line is "":
+            return False
         entry = json.loads(self.ui_line)
         next_entry = json.loads(self.next_ui_line)
         self.ui.update(entry)
         self.ui_next.update(next_entry)
+        return True
 
     def finish(self):
         """
@@ -252,4 +289,5 @@ class PlayBack:
         :return:
         """
         self.ui_log.close()
-        self.eye_log.close()
+        if not self.ui_mode:
+            self.eye_log.close()
