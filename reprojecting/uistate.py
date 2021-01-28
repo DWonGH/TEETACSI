@@ -18,7 +18,7 @@ from lxml import etree
 class UIState:
 
     def __del__(self):
-        if self.multi is True:
+        if self.multi and self.signals is True:
             self.pool.close()
             self.pool.join()
 
