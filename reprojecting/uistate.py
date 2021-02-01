@@ -249,40 +249,70 @@ class UIState:
         buffer_seconds = int(samples_to_read / self.edf.getSampleFrequency(i))
         channel.data = numpy.empty(samples_to_read, dtype=numpy.float_)
 
+        print(f"time position {time_position}, time scale {time_scale}, edf length (s) {edf_seconds}, sample position {sample_position}, samples to read {samples_to_read}, buffer length (s) {buffer_seconds}")
+
         if samples_to_read > 1:
 
             # EDFBrowser allows the user to scroll before the starting point of the recording, or past the end of the recording.
             # E.g. the user can scroll to -1 hour from the start of the recording if they wanted. We need read the data
             # from the EDF accordingly and set the buffer to nan values if we go past the start or end points.
 
+            # If the user has zoomed out so that the beginning and the ends are off the page
+            if time_position < 0 and time_position + buffer_seconds > edf_seconds:
+                print("Zoomed out both sides")
+                # Buffer needs to be edf total seconds + seconds before + seconds after
+                # Read in the whole edf
+                # Roll the edf data seconds before
+                # Then set seconds before nans, and seconds after nans
+                seconds_before = time_position * -1
+                samples_before = int(seconds_before * self.edf.getSampleFrequency(i))
+                seconds_after = self.timescale_to_seconds() - edf_seconds
+                samples_after = int(seconds_after * self.edf.getSampleFrequency(i))
+                samples_to_read = int((seconds_before + edf_seconds + seconds_after) * self.edf.getSampleFrequency(i))
+                print(f"seconds before {seconds_before}, seconds after {seconds_after}, samples_to_read {samples_to_read}")
+                channel.data = numpy.empty(int(samples_to_read), dtype=numpy.float_)
+                self.edf.fseek(i, 0, 0)
+                self.edf.readSamples(i, channel.data, self.edf.getTotalSamples(i))
+                channel.data = numpy.roll(channel.data, samples_before)
+                channel.data[:samples_before] = numpy.nan
+                channel.data[samples_before + self.edf.getTotalSamples(i):samples_to_read] = numpy.nan
+
             # The user has scrolled completely past the start of the recording
-            if time_position + buffer_seconds < 0:
+            elif time_position + buffer_seconds <= 0:
+                print("Scrolled completely past left side")
                 channel.data[0:samples_to_read] = numpy.nan
 
             # The user has scrolled partly past the start of the recording
             elif time_position < 0:
+                print("Scrolled past left side")
                 self.edf.fseek(i, 0, 0)
                 self.edf.readSamples(i, channel.data, samples_to_read)
                 channel.data = numpy.roll(channel.data, (sample_position*-1))
-                channel.data[0:(sample_position*-1)] = numpy.nan
+                channel.data[0:(sample_position*-1)+1] = numpy.nan
+
+            # The user has scrolled completely past the recording
+            elif sample_position >= self.edf.getTotalSamples(i):
+                print("Scrolled past right side")
+                channel.data[0:samples_to_read] = numpy.nan
 
             # The user has scrolled partly past the end of the recording
             elif time_position + buffer_seconds > edf_seconds:
+                print("Scrolled partly past right side")
                 seconds_over = (time_position + buffer_seconds) - edf_seconds
                 samples_over = self.edf.getSampleFrequency(i) * seconds_over
+                s = self.edf.getTotalSamples(i) - sample_position
                 self.edf.fseek(i, sample_position, 0)
-                self.edf.readSamples(i, channel.data, samples_over)
+                self.edf.readSamples(i, channel.data, s)
                 #channel.data = numpy.roll(channel.data, (seconds_over * -1))
-                channel.data[int(samples_over):int(samples_to_read)] = numpy.nan
-
-            # The user has scrolled completely past the recording
-            elif time_position >= edf_seconds:
-                channel.data[0:samples_to_read] = numpy.nan
+                channel.data[s+1:samples_to_read] = numpy.nan
 
             # Otherwise the user is somewhere in the middle of the recording
             else:
+                print("Scrolling edf")
                 self.edf.fseek(i, sample_position, 0)
                 self.edf.readSamples(i, channel.data, samples_to_read)
+
+            print(channel.data)
 
     def time_position_to_seconds(self):
         """
@@ -298,18 +328,18 @@ class UIState:
         try:
             x = self.time_position.split('(')[1].strip(')')
             x = datetime.strptime(x, '%H:%M:%S.%f')
-            return x.second + x.minute * 60 + x.hour * 3600
+            return x.second + x.minute * 60 + x.hour * 3600 + x.microsecond
         except ValueError:
             pass
         try:
             x = self.time_position.split('(')[1].strip(')')
             x = datetime.strptime(x, '-%H:%M:%S')
-            return x.second + x.minute * 60 + x.hour * 3600
+            return (x.second + x.minute * 60 + x.hour * 3600) * -1
         except ValueError:
             pass
         x = self.time_position.split('(')[1].strip(')')
         x = datetime.strptime(x, '-%H:%M:%S.%f')
-        return x.second + x.minute * 60 + x.hour * 3600
+        return (x.second + x.minute * 60 + x.hour * 3600 + x.microsecond) * -1
 
     def time_position_to_samples(self, channel):
         x = self.time_position.split('(')[1].strip(')')
@@ -423,12 +453,14 @@ class UIState:
         tasks = []
         for channel in self.channels:
             tasks.append((self.graph_width, self.graph_top_left[0], ppc, channel))
-
         results = self.pool.starmap(self.draw_signal, tasks)
+
         for i in range(len(results)):
             if results[i] is not None:
-                for j in range(len(results[i])-2):
-                    image = cv2.line(image, (results[i][j][0], results[i][j][1]), (results[i][j+1][0], results[i][j+1][1]), (255, 0, 0), 1)
+                for j in range(len(results[i])-1):
+                    if not numpy.isnan(results[i][j][0]) and not numpy.isnan(results[i][j][1]):
+                        if not numpy.isnan(results[i][j+1][0]) and not numpy.isnan(results[i][j+1][1]):
+                            image = cv2.line(image, (int(results[i][j][0]), int(results[i][j][1])), (int(results[i][j+1][0]), int(results[i][j+1][1])), (255, 0, 0), 1)
 
         return image
 
@@ -437,9 +469,10 @@ class UIState:
         if isinstance(channel.data, numpy.ndarray):
             num_samples = channel.data.size
             if num_samples > 0:
-                arr = numpy.empty((num_samples, 2), dtype=numpy.int)
+                arr = numpy.empty((num_samples, 2))
+                arr[:] = numpy.nan
                 spacing = graph_width / num_samples
-                for point in range(channel.data.size - 1):
+                for point in range(channel.data.size):
                     if not math.isnan(channel.data[point]):
                         # Yc = s * Yr + o
                         x = int(int(point * spacing) + graph_left)

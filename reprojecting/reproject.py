@@ -15,9 +15,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Debugging
-    # input_dir = r'D:\teetacsi_local\TEETACSI\data\analysis_sessions\27-01-2021_13-50\v2.0.0\edf\eval\abnormal\01_tcp_ar\007\00000768\s003_2012_04_06\27-01-2021-13-59-42'
-    # args.input = input_dir
-    # args.playback = True
+    input_dir = r'E:\computer_science\living_lab\2020TEETACSI\Tests\test7\01-02-2021-13-46-51'
+    #input_dir = r'E:\computer_science\living_lab\2020TEETACSI\Tests\test7\01-02-2021-12-15-18-buffer'
+    args.input = input_dir
+    args.playback = True
+    args.signals = True
+    args.video = True
+
 
     print(f"Running TEETACSI data processing")
     playback = PlayBack(args.input, args.playback, args.video, args.signals, args.ui)
