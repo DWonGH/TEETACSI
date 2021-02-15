@@ -64,7 +64,8 @@ class UIState:
 
     def update(self, entry):
         """
-        Read an entry from the UI log file and reconstruct the state using the information
+        Entries are recorded in the log file using a log id and timestamp, and EVENT name, and
+        corresponding data entry if required. Read an entry from the UI log file and reconstruct the state using the information
         :param entry: A line from the UI log loaded into a dictionary
         :return: False if the entry was "FILE_CLOSED"
         """
@@ -232,6 +233,10 @@ class UIState:
                     self.update_channel_data(i, self.channels[i], time_position, time_scale)
 
     def update_channels(self):
+        """
+        When we want to update the signal data for each channel.
+        :return:
+        """
         time_position = self.time_position_to_seconds()
         time_scale = self.timescale_to_seconds()
         for i, channel in enumerate(self.channels):
@@ -239,7 +244,16 @@ class UIState:
 
     def update_channel_data(self, i, channel, time_position, time_scale):
         """
-        Reconstruct the signals for the current state.
+        When we want to reconstruct the signal data, we use the "edfreader" module to load data
+        from the EDF file. Each channel has its own buffer which describes the current data in view.
+
+        There are 3 issues to consider before this function is stable:
+        - First, the buffer appears skewed when zooming out past the entire recording, i.e. when
+            there are blank spaces either side of the eeg data.
+        - Second, we need to handle what happens when the user zooms in past 1msec per page. At
+            this point it is required to read less than one sample which is not possible.
+        - Finally, there is an issue with converting between C longs and python ints,
+            which it is suspected is a problem with memory and using multiprocessing...
         :return:
         """
 
@@ -316,7 +330,8 @@ class UIState:
 
     def time_position_to_seconds(self):
         """
-        Convert the recorded time string in the log
+        The time position is recording from EDFBrowser as a string. Use this to
+        convert from a string to integer / seconds
         :return: An int describing the time in seconds
         """
         try:
@@ -342,6 +357,11 @@ class UIState:
         return (x.second + x.minute * 60 + x.hour * 3600 + x.microsecond) * -1
 
     def time_position_to_samples(self, channel):
+        """
+        Calculates the position of the recording in samples.
+        :param channel:
+        :return:
+        """
         x = self.time_position.split('(')[1].strip(')')
         x = time.strptime(x, '%H:%M:%S')
         total_seconds = x.tm_sec + x.tm_min * 60 + x.tm_hour * 3600
@@ -374,6 +394,11 @@ class UIState:
                     print("Try a different format")
 
     def draw(self, image):
+        """
+        Used for visualising the tracking data
+        :param image: The image we want to draw tracking data on
+        :return: the image with painted tracking data
+        """
         if not (self.last_event == "MENU_OPENED" or self.last_event == "MENU_SEARCH" or self.last_event == "MENU_CLOSED" or self.last_event == "MODAL_OPENED" or self.last_event == "MODAL_CLOSED" or self.last_event == "WINDOW_MINIMISED"):
             image = self.draw_graph_bbox(image)
             image = self.draw_channel_baselines(image)
@@ -439,8 +464,7 @@ class UIState:
 
     def draw_channel_signals(self, image):
         """
-        Given the offset o and scale s, we should be able to read the original EDF file and then convert the
-        raw data Yr to a vertical screen coordinate Yc using Yc = s * Yr + o
+
         :param image: The corresponding screenshot to this current log
         :return: An image with the EEG data traced over the top
         """
@@ -466,6 +490,21 @@ class UIState:
 
     @staticmethod
     def draw_signal(graph_width, graph_left, ppc, channel):
+        """
+        Does not actually draw a signal, but calculates the image positions of the re-read signal
+        data using the tracking information.
+
+        Given the offset o and scale s, we should be able to read the original EDF file and then convert the
+        raw data Yr to a vertical screen coordinate Yc using Yc = s * Yr + o
+
+        Currently, the calculation appears to invert either side of 100volts-per-cm. I.e. the
+        signal will zoom out instead of zooming in. Need to consider some other screen scale information?
+        :param graph_width:
+        :param graph_left:
+        :param ppc: See "draw_channel_signals", it is avalue that converts between dpi and pixels per cm.
+        :param channel:
+        :return:
+        """
         if isinstance(channel.data, numpy.ndarray):
             num_samples = channel.data.size
             if num_samples > 0:
