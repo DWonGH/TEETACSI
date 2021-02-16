@@ -72,18 +72,12 @@ and generate the final data set by using the tools in the ```reprojecting``` dir
 
 This command will play the UI and eye tracking data for a particular session log.
 ```shell script
-python reprojecting\reproject.py --playback --input <path_to_output_mirror_directory\path_to_timestamped_log_directory>
+python reprojecting\reproject.py --input <path_to_output_mirror_directory\path_to_timestamped_log_directory> --playback
 ```
 
 This will produce a ```.avi``` video file for a recording in the mirror directory which can be played back for verification.
 Creating video files like these are massive, like around a GB per minute. Need to change the codec or compress the video
 afterwards to avoid this.
 ```shell script
-python reprojecting\reproject.py --video --input <path_to_output_mirror_directory\path_to_timestamped_log_directory>
-```
-
-We can test the UI tracking without the gaze data. Using the ```--ui``` flag will make a folder
-with the UI tracking reprojected to each screenshot
-```shell script
-python reprojecting\reproject.py --ui --playback --input <path_to_output_mirror_directory\path_to_timestamped_log_directory>
+python reprojecting\reproject.py --input <path_to_output_mirror_directory\path_to_timestamped_log_directory> --video
 ```
