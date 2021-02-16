@@ -1,3 +1,4 @@
 [submodule "OpenSCORE"]
 	path = OpenSCORE
 	url = https://github.com/DWonGH/OpenSCORE.git
+	branch = teetacsi
